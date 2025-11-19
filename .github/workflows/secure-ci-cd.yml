@@ -1,0 +1,137 @@
+name: Secure CI/CD Demo
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  id-token: write            # para OIDC
+  packages: write
+  issues: write
+
+jobs:
+  prechecks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # necesario para detectar historial en scans de secretos
+
+      - name: Detect secrets (git-secrets)
+        uses: docker://awslabs/git-secrets:latest
+        # alternativamente ejecutar una acción que instale git-secrets y lo ejecute
+        continue-on-error: false
+
+      - name: Setup Python (for tests)   # adaptar según stack
+        uses: actions/setup-python@v4
+        with: { python-version: '3.11' }
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run linters
+        run: |
+          flake8 .
+          mypy .
+
+      - name: Run unit tests
+        run: pytest -q
+
+  security-scans:
+    needs: prechecks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        scanner: [semgrep, dependency-check, trivy]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Semgrep (SAST)
+        if: matrix.scanner == 'semgrep'
+        uses: returntocorp/semgrep-action@v2
+        with:
+          config: "p/ci"   # demo: usar reglas públicas o tu conjunto
+
+      - name: Dependency Check / SCA
+        if: matrix.scanner == 'dependency-check'
+        uses: docker://owasp/dependency-check
+        with:
+          args: --project my-demo -f JSON -s .
+
+      - name: Build container image (for Trivy scan)
+        if: matrix.scanner == 'trivy'
+        run: |
+          docker build -t demo-app:ci .
+          docker save demo-app:ci -o demo-app.tar
+
+      - name: Trivy scan image
+        if: matrix.scanner == 'trivy'
+        uses: aquasecurity/trivy-action@v2
+        with:
+          input: demo-app:ci
+          format: 'table'
+          exit-code: '1'    # falla si hay vulnerabilidades de alta severidad
+
+  sbom_and_sign:
+    needs: security-scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate SBOM (syft)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft -o json=sbom.json .
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+      - name: Sign artifact (demo: gpg)
+        run: |
+          # En demo: usar gpg local; en prod usar KMS/HSM/Sign service
+          echo "demo-sign" > signature.txt
+
+  build_and_push:
+    needs: sbom_and_sign
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to registry with OIDC (example: AWS ECR)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsOIDCRole
+          aws-region: us-east-1
+      - name: Build and push image
+        run: |
+          docker buildx build --platform linux/amd64 -t 123456789012.dkr.ecr.us-east-1.amazonaws.com/demo-app:${{ github.sha }} --push .
+      - name: Create Release Candidate tag
+        run: |
+          echo "rc:${{ github.sha }}" > release.txt
+      - name: Upload release metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata
+          path: release.txt
+
+  deploy-staging:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Manual approval (demo)
+        uses: peter-evans/wait-for-approval@v2
+        with:
+          approvers: 'team-lead'   # demo: ajustar
+          timeout-minutes: 60
+
+      - name: Deploy to staging (example kubectl)
+        env:
+          KUBECONFIG: ${{ secrets.STAGING_KUBECONFIG }}
+        run: |
+          kubectl set image deployment/demo demo=123456789012.dkr.ecr.us-east-1.amazonaws.com/demo-app:${{ github.sha }}
