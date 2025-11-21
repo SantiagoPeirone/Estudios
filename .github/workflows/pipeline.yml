@@ -1,21 +1,23 @@
-name: Deployment pipeline
+name: Pipeline Monitoreo
 
 on:
-  push:
+  workflow_dispatch:      # Para ejecutarlo manualmente
+  push:                   # Opcional: corre cuando subís a la branch
     branches:
-      - fix/scripts
+      - fix/scripts       # Solo en la branch de pruebas
 
 jobs:
-  deploy:
+  run-monitor:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
-      - name: Give permissions to script
+      - name: Dar permisos a scripts
         run: |
-            chmod +x ./monitoreo.sh
-            chmod +x ./scripts/alerta.sh
+          chmod +x ./scripts/monitoreo.sh
+          chmod +x ./scripts/alerta.sh
 
-      - name: Execute script
-        run: ./scripts/monitoreo.sh
+      - name: Ejecutar monitoreo
+        run: ./scripts/monitoreo.sh 50   # 50 = umbral de prueba
