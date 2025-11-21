@@ -20,4 +20,4 @@ jobs:
           chmod +x ./scripts/alerta.sh
 
       - name: Ejecutar monitoreo
-        run: ./scripts/monitoreo.sh 50   # 50 = umbral de prueba
+        run: ./scripts/scripts-avanzados/monitoreo.sh 20   # 20 = umbral de prueba
