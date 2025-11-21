@@ -1,0 +1,21 @@
+name: Deployment pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Give permissions to script
+        run: |
+            chmod +x ./monitoreo.sh
+            chmod +x ./scripts/alerta.sh
+
+      - name: Execute script
+        run: ./scripts/monitoreo.sh
