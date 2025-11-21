@@ -1,0 +1,23 @@
+name: Pipeline Monitoreo
+
+on:
+  workflow_dispatch:      # Para ejecutarlo manualmente
+  push:                   # Opcional: corre cuando subís a la branch
+    branches:
+      - fix/scripts       # Solo en la branch de pruebas
+
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Dar permisos a scripts
+        run: |
+          chmod +x ./scripts/scripts-avanzados/monitoreo.sh
+          chmod +x ./scripts/scripts-avanzados/alerta.sh
+
+      - name: Ejecutar monitoreo
+        run: ./scripts/scripts-avanzados/monitoreo.sh 20   # 20 = umbral de prueba
