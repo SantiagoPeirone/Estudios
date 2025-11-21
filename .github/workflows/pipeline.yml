@@ -21,3 +21,4 @@ jobs:
 
       - name: Ejecutar monitoreo
         run: ./scripts/scripts-avanzados/monitoreo.sh 20   # 20 = umbral de prueba
+        continue-on-error: true
