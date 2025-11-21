@@ -16,8 +16,8 @@ jobs:
 
       - name: Dar permisos a scripts
         run: |
-          chmod +x ./scripts/monitoreo.sh
-          chmod +x ./scripts/alerta.sh
+          chmod +x ./scripts/scripts-avanzados/monitoreo.sh
+          chmod +x ./scripts/scripts-avanzados/alerta.sh
 
       - name: Ejecutar monitoreo
         run: ./scripts/scripts-avanzados/monitoreo.sh 20   # 20 = umbral de prueba
